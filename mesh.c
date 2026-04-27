@@ -49,15 +49,64 @@ uint8_t node_relation[9][4] = {
 		{16, 19, 20, 23},
 };
 
-bool does_intersect(uint8_t node_a, uint8_t node_b) {
-	/*
-	uint32_t mask_a =
-	uint32_t mask_b =
+// ANDing nodes together will tell us which points intersect
+uint32_t node_relation_bitwise[9] = {
+		(1 << 0) | (1 << 3) | (1 << 4) | (1 << 7),
+		(1 << 1) | (1 << 4) | (1 << 5) | (1 << 8),
+		(1 << 2) | (1 << 5) | (1 << 6) | (1 << 9),
 
-	return mask_a & mask_b;
-	*/
+		(1 << 7) | (1 << 10) | (1 << 11) | (1 << 14),
+		(1 << 8) | (1 << 11) | (1 << 12) | (1 << 15),
+		(1 << 9) | (1 << 12) | (1 << 13) | (1 << 16),
+
+		(1 << 14) | (1 << 17) | (1 << 18) | (1 << 21),
+		(1 << 15) | (1 << 18) | (1 << 19) | (1 << 22),
+		(1 << 16) | (1 << 19) | (1 << 20) | (1 << 23)
+};
+
+bool mesh_point_init(mesh_point_t *point) {
+	point->what = mesh_point_type_connection;
+	point->is_closed = true;
+	point->generation_level = 0;
+	point->impedance = 1;
+	point->voltage = 0;
 
 	return true;
+}
+
+bool mesh_node_buffer_insert(mesh_node_buffer_t *buf, uint8_t node_idx) {
+	if (buf->length < MESH_SUPER_NODE_BUFFER_DEPTH) {
+		buf->indices[buf->length] = node_idx;
+		buf->length++;
+
+		return true;
+	}
+
+	return false;
+}
+
+bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
+	if (node->length < MESH_NODE_POINT_BUFFER_SIZE) {
+		node->indices[buf->length] = node_idx;
+		node->length++;
+
+		return true;
+	}
+
+	return false;
+}
+
+bool mesh_reset_buffers(mesh_t *system) {
+	system->num_super_nodes = 0;
+	system->num_nodes = 0;
+
+	for (int node_idx = 0; node_idx < MESH_NODE_BUFFER_SIZE; node_idx++) {
+		system->nodes[node_idx].length = 0;
+	}
+
+	for (int super_node_idx = 0; super_node_idx < MESH_SUPER_NODE_BUFFER_SIZE; super_node_idx++) {
+		system->super_nodes[super_node_idx].length = 0;
+	}
 }
 
 bool mesh_init(mesh_t *system) {
@@ -72,12 +121,12 @@ The simplified graph will merge nodes which are connected by loads.
 
 	// Make every point a connection by default
 	for (int i = 0; i < 24; i++) {
-		system->points[i]->what = mesh_point_type_connection;
-		system->points[i]->is_closed = true;
+		mesh_point_init(&system->points[i]);
 	}
 
-	system->num_super_nodes = 0;
-	system->num_nodes = 0;
+	mesh_reset_buffers(system);
+
+	return true;
 }
 
 bool mesh_solve(mesh_t *system) {
@@ -119,18 +168,17 @@ bool mesh_solve(mesh_t *system) {
 	x is an (M + N) * 1 matrix. Top N elements are the node voltages.
 	Bottom M elements are the currents through the M independent sources.
 */
-
-	system->num_super_nodes = 0;
-	system->num_nodes = 0;
+	mesh_reset_buffers(system);
 
 	// Generate a simplified network by considering loads
 	mesh_point_t *point;
 
-	for (int node_idx = 0; node_idx < 9; node_idx++) {
+	for (int node_idx = 0; node_idx < MESH_NODE_BUFFER_SIZE; node_idx++) {
 		// Each node has 4 points
-		point = node_relation[node_idx];
 		bool load = false;
-		for (int point_idx = 0; point_idx < 4; point_idx++, point++) {
+		for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
+			point = &system->points[node_relation[node_idx][point_idx]];
+
 			if (point->what == mesh_point_type_load) {
 				load = true;
 				break;
@@ -140,12 +188,35 @@ bool mesh_solve(mesh_t *system) {
 		if (load) {
 			// If there is a load at this node, check if any of its load points
 			// intersect with any existing supernodes. If it does, then we merge
-			// This node with the intersecting supernode
+			// This node with the intersecting supernode.
+			mesh_node_buffer_t *super;
+			// Each node can only intersect with another node by a single point
+			// Because of the grid layout
+			uint8_t intersection;
 			for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
+				super = &system->super_nodes[super_node_idx];
 
+				for (uint8_t *node = super->indices; node < super->length - 1; node++) {
+					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[*node];
+
+					if (system->points[intersection].what == mesh_point_type_load) {
+						mesh_node_buffer_insert(super, node_idx);
+					}
+				}
 			}
+			// If no intersection, create a new supernode
+			mesh_node_buffer_insert(&system->super_nodes[system->num_super_nodes], node_idx);
+
+			system->num_super_nodes++;
 		} else {
 			// If there are no loads, simply add the node to the list with all its points
+
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][0]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][1]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][2]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][3]);
+
+			system->num_nodes++;
 		}
 	}
 
