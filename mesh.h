@@ -7,6 +7,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
+#include "fsl_debug_console.h"
 
 #ifndef MESH_H_
 #define MESH_H_

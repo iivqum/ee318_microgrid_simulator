@@ -64,6 +64,16 @@ uint32_t node_relation_bitwise[9] = {
 		(1 << 16) | (1 << 19) | (1 << 20) | (1 << 23)
 };
 
+uint8_t count_trailing_zeros(uint32_t n) {
+	// Find intersection of 2 nodes
+	uint8_t zeros = 0;
+	while (!(n & 1)) {
+		zeros++;
+		n >>= 1;
+	}
+	return zeros;
+}
+
 bool mesh_point_init(mesh_point_t *point) {
 	point->what = mesh_point_type_connection;
 	point->is_closed = true;
@@ -87,7 +97,7 @@ bool mesh_node_buffer_insert(mesh_node_buffer_t *buf, uint8_t node_idx) {
 
 bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
 	if (node->length < MESH_NODE_POINT_BUFFER_SIZE) {
-		node->indices[buf->length] = node_idx;
+		node->indices[node->length] = point_idx;
 		node->length++;
 
 		return true;
@@ -107,6 +117,8 @@ bool mesh_reset_buffers(mesh_t *system) {
 	for (int super_node_idx = 0; super_node_idx < MESH_SUPER_NODE_BUFFER_SIZE; super_node_idx++) {
 		system->super_nodes[super_node_idx].length = 0;
 	}
+
+	return true;
 }
 
 bool mesh_init(mesh_t *system) {
@@ -192,33 +204,37 @@ bool mesh_solve(mesh_t *system) {
 			mesh_node_buffer_t *super;
 			// Each node can only intersect with another node by a single point
 			// Because of the grid layout
-			uint8_t intersection;
+			uint32_t intersection = 0;
+			bool merge = false;
 			for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
 				super = &system->super_nodes[super_node_idx];
 
-				for (uint8_t *node = super->indices; node < super->length - 1; node++) {
-					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[*node];
-
-					if (system->points[intersection].what == mesh_point_type_load) {
+				for (int merger_index = 0; merger_index < super->length; merger_index++) {
+					uint8_t node = super->indices[merger_index];
+					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[node];
+					if (system->points[count_trailing_zeros(intersection)].what == mesh_point_type_load) {
 						mesh_node_buffer_insert(super, node_idx);
+						merge = true;
+						break;
 					}
 				}
-			}
-			// If no intersection, create a new supernode
-			mesh_node_buffer_insert(&system->super_nodes[system->num_super_nodes], node_idx);
 
-			system->num_super_nodes++;
+				if (merge)
+					break;
+			}
+			if (!merge)
+				// If no merge happened, create a new supernode
+				mesh_node_buffer_insert(&system->super_nodes[system->num_super_nodes++], node_idx);
 		} else {
 			// If there are no loads, simply add the node to the list with all its points
-
 			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][0]);
 			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][1]);
 			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][2]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][3]);
-
-			system->num_nodes++;
+			mesh_node_point_insert(&system->nodes[system->num_nodes++], node_relation[node_idx][3]);
 		}
 	}
 
 	// Now solve the system after its been simplified
+
+	return true;
 }
