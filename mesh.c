@@ -7,6 +7,7 @@
 
 
 #include "mesh.h"
+#include <stddef.h>
 
 /*
 The grid looks like this. There are 24 points.
@@ -48,6 +49,17 @@ uint8_t node_relation[9][4] = {
 		{16, 19, 20, 23},
 };
 
+bool does_intersect(uint8_t node_a, uint8_t node_b) {
+	/*
+	uint32_t mask_a =
+	uint32_t mask_b =
+
+	return mask_a & mask_b;
+	*/
+
+	return true;
+}
+
 bool mesh_init(mesh_t *system) {
 /*
 First, a collection of every possible node in the circuit is created
@@ -58,11 +70,14 @@ Then this graph is simplified by the solver, considering the loads.
 The simplified graph will merge nodes which are connected by loads.
 */
 
-// Make every point a connection by default
-for (int i = 0; i < 24; i++) {
-	system->points[i]->what = mesh_point_type_connection;
-	system->points[i]->is_closed = true;
-}
+	// Make every point a connection by default
+	for (int i = 0; i < 24; i++) {
+		system->points[i]->what = mesh_point_type_connection;
+		system->points[i]->is_closed = true;
+	}
+
+	system->num_super_nodes = 0;
+	system->num_nodes = 0;
 }
 
 bool mesh_solve(mesh_t *system) {
@@ -105,8 +120,34 @@ bool mesh_solve(mesh_t *system) {
 	Bottom M elements are the currents through the M independent sources.
 */
 
-// Generate a list of simplified nodes
+	system->num_super_nodes = 0;
+	system->num_nodes = 0;
 
+	// Generate a simplified network by considering loads
+	mesh_point_t *point;
 
+	for (int node_idx = 0; node_idx < 9; node_idx++) {
+		// Each node has 4 points
+		point = node_relation[node_idx];
+		bool load = false;
+		for (int point_idx = 0; point_idx < 4; point_idx++, point++) {
+			if (point->what == mesh_point_type_load) {
+				load = true;
+				break;
+			}
+		}
 
+		if (load) {
+			// If there is a load at this node, check if any of its load points
+			// intersect with any existing supernodes. If it does, then we merge
+			// This node with the intersecting supernode
+			for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
+
+			}
+		} else {
+			// If there are no loads, simply add the node to the list with all its points
+		}
+	}
+
+	// Now solve the system after its been simplified
 }
