@@ -66,6 +66,8 @@ uint32_t node_relation_bitwise[9] = {
 
 uint8_t count_trailing_zeros(uint32_t n) {
 	// Find intersection of 2 nodes
+	if (n == 0)
+		return 32;
 	uint8_t zeros = 0;
 	while (!(n & 1)) {
 		zeros++;
@@ -212,10 +214,13 @@ bool mesh_solve(mesh_t *system) {
 				for (int merger_index = 0; merger_index < super->length; merger_index++) {
 					uint8_t node = super->indices[merger_index];
 					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[node];
-					if (system->points[count_trailing_zeros(intersection)].what == mesh_point_type_load) {
-						mesh_node_buffer_insert(super, node_idx);
-						merge = true;
-						break;
+					// Make sure intersection does not equal 0
+					if (intersection) {
+						if (system->points[count_trailing_zeros(intersection)].what == mesh_point_type_load) {
+							mesh_node_buffer_insert(super, node_idx);
+							merge = true;
+							break;
+						}
 					}
 				}
 
