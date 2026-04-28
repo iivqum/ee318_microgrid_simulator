@@ -7,9 +7,14 @@
 
 
 #include "mesh.h"
+#include "arm_math.h"
 #include <stddef.h>
 
 #define NUM_BASE_NODES 9
+
+float32_t a[15][15] = {0};
+float32_t a_inv[15][15] = {0};
+float32_t z[15] = {0};
 
 /*
 The grid looks like this. There are 24 points.
@@ -189,9 +194,6 @@ The simplified graph will merge nodes which are connected by loads.
 	return true;
 }
 
-float a[15][15] = {0};
-float z[15] = {0};
-
 bool mesh_solve(mesh_t *system) {
 /*
  	We are trying to solve x = A^-1 * Z
@@ -311,7 +313,7 @@ bool mesh_solve(mesh_t *system) {
 	// Now solve the system
 
 	//uint32_t g_size = system->num_nodes * system->num_nodes;
-	uint32_t a_size = (system->num_nodes + system->source_nodes.length);
+	uint16_t a_size = (system->num_nodes + system->source_nodes.length);
 
 	// Set off-diagonals of the G matrix
 	mesh_node_t *node, *con_node;
@@ -327,14 +329,14 @@ bool mesh_solve(mesh_t *system) {
 			point = &system->points[trailing_zeros(intersection)];
 
 			if (point->is_closed) {
-				a[node_idx][con_node_loc] = - 1 / point->impedance;
+				a[node_idx][con_node_loc] = - 1 / (float32_t)point->impedance;
 			}
 		}
 		// Set diagonals of G
 		for (int point_idx = 0; point_idx < node->length; point_idx++) {
 			point = &system->points[node->indices[point_idx]];
 
-			a[node_idx][node_idx] += 1 / point->impedance;
+			a[node_idx][node_idx] += 1 / (float32_t)point->impedance;
 		}
 	}
 
@@ -352,7 +354,7 @@ bool mesh_solve(mesh_t *system) {
 
 	// As there are no dependent sources, don't bother doing anything with D
 	// Since its already 0
-
+	// Now invert A
 
 
 
