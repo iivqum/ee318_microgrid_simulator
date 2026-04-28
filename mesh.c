@@ -147,12 +147,15 @@ bool mesh_build_node_graph(mesh_t *system) {
 				system->num_nodes++;
 
 				mesh_node_buffer_insert(&system->source_nodes, node_count);
-				mesh_node_buffer_insert(&node->cons, node_count);
+				//mesh_node_buffer_insert(&node->cons, node_count);
+				//mesh_node_buffer_insert(&system->nodes[node_count].cons, node_idx);
 				mesh_node_point_insert(&system->nodes[node_count], point_idx);
 			}
 		}
+	}
 
-		for (int cmp_node_idx = node_idx; cmp_node_idx < num_nodes; cmp_node_idx++) {
+	for (int node_idx = 0; node_idx < system->num_nodes; node_idx++) {
+		for (int cmp_node_idx = node_idx; cmp_node_idx < system->num_nodes; cmp_node_idx++) {
 			if (cmp_node_idx == node_idx)
 				continue;
 			// Check if these nodes share any points
@@ -186,7 +189,8 @@ The simplified graph will merge nodes which are connected by loads.
 	return true;
 }
 
-float a[15][15];
+float a[15][15] = {0};
+float z[15] = {0};
 
 bool mesh_solve(mesh_t *system) {
 /*
@@ -322,10 +326,8 @@ bool mesh_solve(mesh_t *system) {
 			intersection = node->point_mask & con_node->point_mask;
 			point = &system->points[trailing_zeros(intersection)];
 
-			if (point->what == mesh_point_type_connection && point->is_closed) {
+			if (point->is_closed) {
 				a[node_idx][con_node_loc] = - 1 / point->impedance;
-			} else {
-				a[node_idx][con_node_loc] = 0;
 			}
 		}
 		// Set diagonals of G
@@ -335,6 +337,22 @@ bool mesh_solve(mesh_t *system) {
 			a[node_idx][node_idx] += 1 / point->impedance;
 		}
 	}
+
+	// Construct B matrix
+	// Since sources aren't between nodes. We can add them easily. Always positive polarity too.
+	for (int source_node_idx = 0; source_node_idx < system->source_nodes.length; source_node_idx++) {
+		uint8_t node_idx = system->source_nodes.indices[source_node_idx];
+		a[node_idx][system->num_nodes + source_node_idx] = 1;
+		// C matrix. Transpose of B
+		a[system->num_nodes + source_node_idx][node_idx] = 1;
+		// Z matrix
+		// All source set to 1 for now. This needs changed later
+		z[system->num_nodes + source_node_idx] = 1;
+	}
+
+	// As there are no dependent sources, don't bother doing anything with D
+	// Since its already 0
+
 
 
 
