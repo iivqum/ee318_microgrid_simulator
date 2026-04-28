@@ -147,6 +147,7 @@ bool mesh_build_node_graph(mesh_t *system) {
 				system->num_nodes++;
 
 				mesh_node_buffer_insert(&system->source_nodes, node_count);
+				mesh_node_buffer_insert(&node->cons, node_count);
 				mesh_node_point_insert(&system->nodes[node_count], point_idx);
 			}
 		}
@@ -184,6 +185,8 @@ The simplified graph will merge nodes which are connected by loads.
 
 	return true;
 }
+
+float a[15][15];
 
 bool mesh_solve(mesh_t *system) {
 /*
@@ -300,8 +303,38 @@ bool mesh_solve(mesh_t *system) {
 	}
 
 	mesh_build_node_graph(system);
+	// Everything above can be precomputed
+	// Now solve the system
 
+	//uint32_t g_size = system->num_nodes * system->num_nodes;
+	uint32_t a_size = (system->num_nodes + system->source_nodes.length);
 
+	// Set off-diagonals of the G matrix
+	mesh_node_t *node, *con_node;
+	uint32_t intersection = 0;
+
+	for (int node_idx = 0; node_idx < system->num_nodes; node_idx++) {
+		node = &system->nodes[node_idx];
+		// Set off-diagonals of G
+		for (int con_node_idx = 0; con_node_idx < node->cons.length; con_node_idx++) {
+			uint8_t con_node_loc = node->cons.indices[con_node_idx];
+			con_node = &system->nodes[con_node_loc];
+			intersection = node->point_mask & con_node->point_mask;
+			point = &system->points[trailing_zeros(intersection)];
+
+			if (point->what == mesh_point_type_connection && point->is_closed) {
+				a[node_idx][con_node_loc] = - 1 / point->impedance;
+			} else {
+				a[node_idx][con_node_loc] = 0;
+			}
+		}
+		// Set diagonals of G
+		for (int point_idx = 0; point_idx < node->length; point_idx++) {
+			point = &system->points[node->indices[point_idx]];
+
+			a[node_idx][node_idx] += 1 / point->impedance;
+		}
+	}
 
 
 
