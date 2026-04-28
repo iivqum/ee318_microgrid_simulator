@@ -9,6 +9,8 @@
 #include "mesh.h"
 #include <stddef.h>
 
+#define NUM_BASE_NODES 9
+
 /*
 The grid looks like this. There are 24 points.
 Start indexing at the first element and work down.
@@ -35,7 +37,7 @@ The node_relation array gives which points are connected to each
 node.
 */
 
-uint8_t node_relation[9][4] = {
+uint8_t node_relation[NUM_BASE_NODES][4] = {
 		{0, 3, 4, 7},
 		{1, 4, 5, 8},
 		{2, 5, 6, 9},
@@ -50,7 +52,7 @@ uint8_t node_relation[9][4] = {
 };
 
 // ANDing nodes together will tell us which points intersect
-uint32_t node_relation_bitwise[9] = {
+uint32_t node_relation_bitwise[NUM_BASE_NODES] = {
 		(1 << 0) | (1 << 3) | (1 << 4) | (1 << 7),
 		(1 << 1) | (1 << 4) | (1 << 5) | (1 << 8),
 		(1 << 2) | (1 << 5) | (1 << 6) | (1 << 9),
@@ -64,7 +66,7 @@ uint32_t node_relation_bitwise[9] = {
 		(1 << 16) | (1 << 19) | (1 << 20) | (1 << 23)
 };
 
-uint8_t count_trailing_zeros(uint32_t n) {
+uint8_t trailing_zeros(uint32_t n) {
 	// Find intersection of 2 nodes
 	if (n == 0)
 		return 32;
@@ -101,6 +103,7 @@ bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
 	if (node->length < MESH_NODE_POINT_BUFFER_SIZE) {
 		node->indices[node->length] = point_idx;
 		node->length++;
+		node->point_mask |= 1 << point_idx;
 
 		return true;
 	}
@@ -111,13 +114,52 @@ bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
 bool mesh_reset_buffers(mesh_t *system) {
 	system->num_super_nodes = 0;
 	system->num_nodes = 0;
+	system->source_nodes.length = 0;
 
 	for (int node_idx = 0; node_idx < MESH_NODE_BUFFER_SIZE; node_idx++) {
 		system->nodes[node_idx].length = 0;
+		system->nodes[node_idx].point_mask = 0;
+		system->nodes[node_idx].cons.length = 0;
 	}
 
 	for (int super_node_idx = 0; super_node_idx < MESH_SUPER_NODE_BUFFER_SIZE; super_node_idx++) {
 		system->super_nodes[super_node_idx].length = 0;
+	}
+
+	return true;
+}
+
+bool mesh_build_node_graph(mesh_t *system) {
+	uint8_t num_nodes = system->num_nodes;
+	mesh_node_t *node;
+
+	for (int node_idx = 0; node_idx < num_nodes; node_idx++) {
+		node = &system->nodes[node_idx];
+		// For every generator, create a new node
+		// CAUTION!!! This will break with generators shared between nodes!
+		// Only have generators at boundary nodes! Two generator nodes will be added if its not.
+		for (int point_buf_idx = 0; point_buf_idx < node->length; point_buf_idx++) {
+			uint8_t point_idx = node->indices[point_buf_idx];
+
+			if (system->points[point_idx].what == mesh_point_type_generator) {
+				// node_count is the new node index
+				uint8_t node_count = system->num_nodes;
+				system->num_nodes++;
+
+				mesh_node_buffer_insert(&system->source_nodes, node_count);
+				mesh_node_point_insert(&system->nodes[node_count], point_idx);
+			}
+		}
+
+		for (int cmp_node_idx = node_idx; cmp_node_idx < num_nodes; cmp_node_idx++) {
+			if (cmp_node_idx == node_idx)
+				continue;
+			// Check if these nodes share any points
+			if (system->nodes[node_idx].point_mask & system->nodes[cmp_node_idx].point_mask) {
+				mesh_node_buffer_insert(&system->nodes[node_idx].cons, cmp_node_idx);
+				mesh_node_buffer_insert(&system->nodes[cmp_node_idx].cons, node_idx);
+			}
+		}
 	}
 
 	return true;
@@ -187,7 +229,7 @@ bool mesh_solve(mesh_t *system) {
 	// Generate a simplified network by considering loads
 	mesh_point_t *point;
 
-	for (int node_idx = 0; node_idx < MESH_NODE_BUFFER_SIZE; node_idx++) {
+	for (int node_idx = 0; node_idx < NUM_BASE_NODES; node_idx++) {
 		// Each node has 4 points
 		bool load = false;
 		for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
@@ -216,7 +258,7 @@ bool mesh_solve(mesh_t *system) {
 					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[node];
 					// Make sure intersection does not equal 0
 					if (intersection) {
-						if (system->points[count_trailing_zeros(intersection)].what == mesh_point_type_load) {
+						if (system->points[trailing_zeros(intersection)].what == mesh_point_type_load) {
 							mesh_node_buffer_insert(super, node_idx);
 							merge = true;
 							break;
@@ -239,7 +281,29 @@ bool mesh_solve(mesh_t *system) {
 		}
 	}
 
-	// Now solve the system after its been simplified
+	// Convert supernodes into nodes
+	mesh_node_buffer_t *super;
+
+	for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
+		super = &system->super_nodes[super_node_idx];
+
+		for (int merger_index = 0; merger_index < super->length; merger_index++) {
+			uint8_t node = super->indices[merger_index];
+
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][0]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][1]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][2]);
+			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][3]);
+		}
+
+		system->num_nodes++;
+	}
+
+	mesh_build_node_graph(system);
+
+
+
+
 
 	return true;
 }
