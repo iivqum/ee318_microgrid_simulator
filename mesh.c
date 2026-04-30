@@ -101,6 +101,10 @@ bool mesh_node_buffer_insert(mesh_node_buffer_t *buf, uint8_t node_idx) {
 }
 
 bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
+	// Point already exists in node
+	if (node->point_mask & 1 << point_idx)
+		return false;
+
 	if (node->length < MESH_NODE_POINT_BUFFER_SIZE) {
 		node->indices[node->length] = point_idx;
 		node->length++;
@@ -244,11 +248,11 @@ bool mesh_solve(mesh_t *system) {
 		for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
 			point = &system->points[node_relation[node_idx][point_idx]];
 			if (point->is_closed) {
+				valid_node = true;
 				if (point->what == mesh_point_type_load) {
 					load = true;
 					break;
 				}
-				valid_node = true;
 			}
 		}
 
