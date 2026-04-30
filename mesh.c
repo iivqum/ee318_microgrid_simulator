@@ -12,10 +12,6 @@
 
 #define NUM_BASE_NODES 9
 
-float32_t a[15][15] = {0};
-float32_t a_inv[15][15] = {0};
-float32_t z[15] = {0};
-
 /*
 The grid looks like this. There are 24 points.
 Start indexing at the first element and work down.
@@ -85,7 +81,7 @@ uint8_t trailing_zeros(uint32_t n) {
 
 bool mesh_point_init(mesh_point_t *point) {
 	point->what = mesh_point_type_connection;
-	point->is_closed = true;
+	point->is_closed = false;
 	point->generation_level = 0;
 	point->impedance = 1;
 	point->voltage = 0;
@@ -125,6 +121,7 @@ bool mesh_reset_buffers(mesh_t *system) {
 		system->nodes[node_idx].length = 0;
 		system->nodes[node_idx].point_mask = 0;
 		system->nodes[node_idx].cons.length = 0;
+		system->nodes[node_idx].voltage = 0;
 	}
 
 	for (int super_node_idx = 0; super_node_idx < MESH_SUPER_NODE_BUFFER_SIZE; super_node_idx++) {
@@ -241,14 +238,22 @@ bool mesh_solve(mesh_t *system) {
 	for (int node_idx = 0; node_idx < NUM_BASE_NODES; node_idx++) {
 		// Each node has 4 points
 		bool load = false;
+		// A node which has no outgoing connections (all points are closed) is not a valid node
+		// Since its unreachable. Will cause the solver to fail.
+		bool valid_node = false;
 		for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
 			point = &system->points[node_relation[node_idx][point_idx]];
-
-			if (point->what == mesh_point_type_load) {
-				load = true;
-				break;
+			if (point->is_closed) {
+				if (point->what == mesh_point_type_load) {
+					load = true;
+					break;
+				}
+				valid_node = true;
 			}
 		}
+
+		if (!valid_node)
+			continue;
 
 		if (load) {
 			// If there is a load at this node, check if any of its load points
@@ -315,6 +320,15 @@ bool mesh_solve(mesh_t *system) {
 	//uint32_t g_size = system->num_nodes * system->num_nodes;
 	uint16_t a_size = (system->num_nodes + system->source_nodes.length);
 
+	float32_t a[a_size][a_size];
+	float32_t a_inv[a_size][a_size];
+	float32_t z[a_size];
+	float32_t result[a_size];
+
+	memset(a, 0, sizeof(a));
+	memset(a_inv, 0, sizeof(a_inv));
+	memset(z, 0, sizeof(z));
+
 	// Set off-diagonals of the G matrix
 	mesh_node_t *node, *con_node;
 	uint32_t intersection = 0;
@@ -335,8 +349,9 @@ bool mesh_solve(mesh_t *system) {
 		// Set diagonals of G
 		for (int point_idx = 0; point_idx < node->length; point_idx++) {
 			point = &system->points[node->indices[point_idx]];
-
-			a[node_idx][node_idx] += 1 / (float32_t)point->impedance;
+			if (point->is_closed) {
+				a[node_idx][node_idx] += 1 / (float32_t)point->impedance;
+			}
 		}
 	}
 
@@ -356,7 +371,22 @@ bool mesh_solve(mesh_t *system) {
 	// Since its already 0
 	// Now invert A
 
+	arm_matrix_instance_f32 a_mat, a_inv_mat, z_mat, result_mat;
 
+	arm_mat_init_f32(&a_mat, a_size, a_size, (float32_t *)a);
+	arm_mat_init_f32(&a_inv_mat, a_size, a_size, (float32_t *)a_inv);
+	arm_mat_init_f32(&z_mat, a_size, 1, (float32_t *)z);
+	arm_mat_init_f32(&result_mat, a_size, 1, (float32_t *)result);
+
+	if (arm_mat_inverse_f32(&a_mat, &a_inv_mat) != ARM_MATH_SUCCESS)
+		return false;
+
+	// x = A^-1 * Z
+	arm_mat_mult_f32(&a_inv_mat, &z_mat, &result_mat);
+
+	for (int i = 0; i < system->num_nodes; i++) {
+		system->nodes[i].voltage = result[i];
+	}
 
 	return true;
 }

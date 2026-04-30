@@ -16,6 +16,7 @@
 #include "clock_config.h"
 #include "fsl_debug_console.h"
 #include "display.h"
+#include "mesh.h"
 /* TODO: insert other include files here. */
 
 /* TODO: insert other definitions and declarations here. */
@@ -72,7 +73,19 @@ int main(void) {
     BOARD_InitDebugConsole();
 #endif
 
-    display_enable();
+    mesh_t system;
+
+    mesh_init(&system);
+
+    system.points[0].what = mesh_point_type_generator;
+    system.points[0].is_closed = true;
+
+    system.points[3].is_closed = true;
+
+    system.points[4].is_closed = true;
+    system.points[4].what = mesh_point_type_load;
+
+    bool success = mesh_solve(&system);
 
     while (1) {
     }
