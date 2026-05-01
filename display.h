@@ -57,10 +57,12 @@ Disable all row and column drivers by default
 */
 #define DISPLAY_REST (uint32_t)0xff80
 
-#define DISPLAY_CLOCK 14
+#define DISPLAY_GPIO_PORT 1
+
+#define DISPLAY_CLOCK 18
 #define DISPLAY_DATA 16
-#define DISPLAY_OEN  18
-#define DISPLAY_R_CLOCK 6
+#define DISPLAY_OEN  14
+#define DISPLAY_R_CLOCK 4
 
 #define DISPLAY_OVERSAMPLE 32
 

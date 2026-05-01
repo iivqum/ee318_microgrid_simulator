@@ -85,6 +85,9 @@ int main(void) {
     system.points[4].is_closed = true;
     system.points[4].what = mesh_point_type_load;
 
+    system.points[1].is_closed = true;
+    system.points[1].what = mesh_point_type_load;
+
     bool success = mesh_solve(&system);
 
     while (1) {
