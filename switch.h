@@ -5,14 +5,18 @@
  *      Author: Josh
  */
 
-#include <stdbool.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
+#include "fsl_gpio.h"
+#include "fsl_common_arm.h"
+#include "fsl_ctimer.h"
+
 
 #ifndef SWITCH_H_
 #define SWITCH_H_
 
-#define SWITCH_GPIO_PORT 1
+#define SWITCH_GPIO_PORT GPIO1
 
 #define SWITCH_CLOCK 19
 #define SWITCH_DATA 17
@@ -28,6 +32,9 @@ MSB	0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 LSB
 
 			   Rows			  Cols   Address   NC
 */
+#define SWITCH_NUM_ROWS 8
+#define SWITCH_NUM_COLS 3
+
 #define SWITCH_C1 (uint32_t)(1 << 15)
 #define SWITCH_C2 (uint32_t)(1 << 14)
 #define SWITCH_C3 (uint32_t)(1 << 13)
