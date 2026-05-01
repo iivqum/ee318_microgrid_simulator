@@ -15,6 +15,10 @@ uint32_t row_lookup[8] = {SWITCH_R1, SWITCH_R2, SWITCH_R3,
 
 bool switch_states[SWITCH_NUM_ROWS][SWITCH_NUM_COLS] = {false};
 
+bool switch_get_state(uint8_t row, uint8_t col) {
+	return switch_states[row][col];
+}
+
 void switch_fetch_states() {
 	uint16_t data;
 
@@ -27,7 +31,7 @@ void switch_fetch_states() {
 
     		switch_write_16(data);
     		// Wait for switches to settle
-    		SDK_DelayAtLeastUs(1e3, 150e6);
+    		SDK_DelayAtLeastUs(100, 150e6);
 
     		switch_states[row][col] = GPIO_PinRead(SWITCH_GPIO_PORT, SWITCH_SENSE);
     	}

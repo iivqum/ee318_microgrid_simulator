@@ -24,6 +24,7 @@
 #include "clock_config.h"
 #include "fsl_debug_console.h"
 #include "display.h"
+#include "switch.h"
 #include "mesh.h"
 /* TODO: insert other include files here. */
 
@@ -99,6 +100,8 @@ int main(void) {
     bool success = mesh_solve(&system);
 
     while (1) {
+    	switch_fetch_states();
+    	PRINTF("%d", switch_get_state(0, 0));
     }
 
     return 0;
