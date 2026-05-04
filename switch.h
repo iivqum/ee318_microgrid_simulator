@@ -61,6 +61,7 @@ void switch_clock_store();
 void switch_clock_output();
 void switch_write_16(uint16_t data);
 bool switch_get_state(uint8_t row, uint8_t col);
-void switch_fetch_states();
+// Returns true if any of the switch states changed
+bool switch_fetch_states();
 
 #endif /* SWITCH_H_ */

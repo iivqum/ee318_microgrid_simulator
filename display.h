@@ -62,12 +62,14 @@ Disable all row and column drivers by default
 #define DISPLAY_CLOCK 18
 #define DISPLAY_DATA 16
 #define DISPLAY_OEN  14
-#define DISPLAY_R_CLOCK 4
+#define DISPLAY_R_CLOCK 6
 
 #define DISPLAY_OVERSAMPLE 32
 
 typedef struct {
 	uint8_t r, g, b;
+	bool blink;
+
 } rgb_led;
 
 void display_callback(uint32_t);
@@ -82,6 +84,7 @@ void display_enable();
 void display_disable();
 void display_test();
 void display_reset();
-void display_set_led();
+void display_set_led(uint32_t row, uint32_t col, rgb_led *value);
+void display_get_color(uint32_t row, uint32_t col, rgb_led *out);
 
 #endif /* DISPLAY_H_ */

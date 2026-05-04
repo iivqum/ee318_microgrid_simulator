@@ -101,10 +101,16 @@ void display_write_int(uint32_t data) {
 	display_write_bytes(out, 3);
 }
 
-void display_set_led(uint32_t row, uint32_t col, rgb_led value) {
-	led_matrix[row][col].r = value.r;
-	led_matrix[row][col].g = value.g;
-	led_matrix[row][col].b = value.b;
+void display_set_led(uint32_t row, uint32_t col, rgb_led *value) {
+	led_matrix[row][col].r = value->r;
+	led_matrix[row][col].g = value->g;
+	led_matrix[row][col].b = value->b;
+}
+
+void display_get_color(uint32_t row, uint32_t col, rgb_led *out) {
+	out->r = led_matrix[row][col].r;
+	out->g = led_matrix[row][col].g;
+	out->b = led_matrix[row][col].b;
 }
 
 void display_reset() {

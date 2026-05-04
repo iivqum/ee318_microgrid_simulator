@@ -38,6 +38,15 @@ The node_relation array gives which points are connected to each
 node.
 */
 
+// Valid locations for generation to be. These are the points around the edges
+// Loads can be anywhere there isn't currently generation.
+uint32_t generation_indices[12] = {
+		0, 1, 2,
+		3, 6, 10,
+		13, 17, 20,
+		21, 22, 23
+};
+
 uint8_t node_relation[NUM_BASE_NODES][4] = {
 		{0, 3, 4, 7},
 		{1, 4, 5, 8},
@@ -79,12 +88,17 @@ uint8_t trailing_zeros(uint32_t n) {
 	return zeros;
 }
 
+mesh_point_t *mesh_get_point(mesh_t *system, uint8_t row, uint8_t col) {
+	return &system->points[row * 3 + col];
+}
+
 bool mesh_point_init(mesh_point_t *point) {
 	point->what = mesh_point_type_connection;
 	point->is_closed = false;
 	point->generation_level = 0;
 	point->impedance = 1;
 	point->voltage = 0;
+	point->nodes.length = 0;
 
 	return true;
 }
@@ -345,17 +359,24 @@ bool mesh_solve(mesh_t *system) {
 			con_node = &system->nodes[con_node_loc];
 			intersection = node->point_mask & con_node->point_mask;
 			point = &system->points[trailing_zeros(intersection)];
-
+			// These points are guaranteed to connect between 2 nodes
 			if (point->is_closed) {
 				a[node_idx][con_node_loc] = - 1 / (float32_t)point->impedance;
-			}
-		}
-		// Set diagonals of G
-		for (int point_idx = 0; point_idx < node->length; point_idx++) {
-			point = &system->points[node->indices[point_idx]];
-			if (point->is_closed) {
+				// Set diagonals of G
 				a[node_idx][node_idx] += 1 / (float32_t)point->impedance;
 			}
+		}
+		// We're left with the points that don't connect between nodes
+		// We don't want basic connections to look like loads, i.e
+		// switches that are terminated to ground.
+		// Only loads can be ground terminated. Filter everything else out
+		for (int point_idx = 0; point_idx < node->length; point_idx++) {
+			point = &system->points[node->indices[point_idx]];
+			if (point->is_closed && point->what == mesh_point_type_load) {
+				// Set diagonals of G
+				a[node_idx][node_idx] += 1 / (float32_t)point->impedance;
+			}
+			mesh_node_buffer_insert(&point->nodes, node_idx);
 		}
 	}
 
@@ -390,6 +411,29 @@ bool mesh_solve(mesh_t *system) {
 
 	for (int i = 0; i < system->num_nodes; i++) {
 		system->nodes[i].voltage = result[i];
+	}
+
+	// Finally calculate voltage across the components
+	for (int point_idx = 0; point_idx < node->length; point_idx++) {
+		point = &system->points[node->indices[point_idx]];
+		// Default voltage at a point is zero
+		// If nothing is connected to it. Zero volts
+		if (point->nodes.length == 0)
+			continue;
+
+		if (point->nodes.length == 1) {
+			if (point->what != mesh_point_type_load)
+				continue;
+
+			point->voltage = system->nodes[point->nodes.indices[0]].voltage;
+
+			continue;
+		}
+
+		// Point must have 2 nodes
+		// Voltage is difference between the nodes that connect it
+		point->voltage = system->nodes[point->nodes.indices[0]].voltage
+				- system->nodes[point->nodes.indices[1]].voltage;
 	}
 
 	return true;

@@ -19,9 +19,10 @@ bool switch_get_state(uint8_t row, uint8_t col) {
 	return switch_states[row][col];
 }
 
-void switch_fetch_states() {
+bool switch_fetch_states() {
 	uint16_t data;
 
+	bool change = false;
     for (int row = 0; row < 8; row++) {
     	for (int col = 0; col < 3; col++) {
     		data = SWITCH_ROW_IDLE;
@@ -33,9 +34,15 @@ void switch_fetch_states() {
     		// Wait for switches to settle
     		SDK_DelayAtLeastUs(100, 150e6);
 
-    		switch_states[row][col] = GPIO_PinRead(SWITCH_GPIO_PORT, SWITCH_SENSE);
+    		bool old_state = switch_states[row][col];
+    		switch_states[row][col] = !GPIO_PinRead(SWITCH_GPIO_PORT, SWITCH_SENSE);
+
+    		if (switch_states[row][col] != old_state)
+    			change = true;
     	}
     }
+
+    return change;
 }
 
 void switch_clock_store() {

@@ -26,6 +26,12 @@
 // How many points are connected to a node
 #define MESH_NODE_CONNECTED_POINTS 4
 
+typedef struct mesh_node_buffer {
+	// Array of node indices
+	uint8_t indices[MESH_SUPER_NODE_BUFFER_DEPTH];
+	size_t length;
+} mesh_node_buffer_t;
+
 typedef enum mesh_point_type {
 /*
 This is a point within the microgrid representing either
@@ -40,15 +46,19 @@ typedef struct mesh_point {
 	// is_closed will be true if this is a connection and its closed
 	bool is_boundary, is_closed;
 	mesh_point_type_t what;
-	// Voltage across this point
+	// Voltage across this component
 	float generation_level, impedance, voltage;
+	/*
+	Stores which nodes are connected to this point.
+	This is used to calculate the voltage across a component
+	Will have a maximum of 2 nodes
+	Points with a single node must be a load, otherwise the voltage
+	across them is zero.
+	Points with 2 nodes will have a voltage equal to the difference between
+	those nodes.
+	*/
+	mesh_node_buffer_t nodes;
 } mesh_point_t;
-
-typedef struct mesh_node_buffer {
-	// Array of node indices
-	uint8_t indices[MESH_SUPER_NODE_BUFFER_DEPTH];
-	size_t length;
-} mesh_node_buffer_t;
 
 typedef struct mesh_node {
 /*
@@ -78,6 +88,7 @@ bool mesh_solve(mesh_t *system);
 bool mesh_init(mesh_t *system);
 bool mesh_reset_buffers(mesh_t *system);
 bool mesh_build_node_graph(mesh_t *system);
+mesh_point_t *mesh_get_point(mesh_t *system, uint8_t row, uint8_t col);
 
 bool mesh_point_init(mesh_point_t *point);
 
