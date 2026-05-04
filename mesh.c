@@ -414,8 +414,8 @@ bool mesh_solve(mesh_t *system) {
 	}
 
 	// Finally calculate voltage across the components
-	for (int point_idx = 0; point_idx < node->length; point_idx++) {
-		point = &system->points[node->indices[point_idx]];
+	for (int point_idx = 0; point_idx < MESH_POINT_BUFFER_SIZE; point_idx++) {
+		point = &system->points[point_idx];
 		// Default voltage at a point is zero
 		// If nothing is connected to it. Zero volts
 		if (point->nodes.length == 0)

@@ -66,6 +66,7 @@ int main(void) {
     system.points[0].is_closed = true;
 
     system.points[3].is_closed = true;
+    system.points[3].what = mesh_point_type_load;
 
     /*
     The game will start when the user flips one of the switches marked with
