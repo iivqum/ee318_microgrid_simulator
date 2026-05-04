@@ -40,11 +40,22 @@ node.
 
 // Valid locations for generation to be. These are the points around the edges
 // Loads can be anywhere there isn't currently generation.
-uint32_t generation_indices[12] = {
+uint8_t generation_indices[12] = {
 		0, 1, 2,
 		3, 6, 10,
 		13, 17, 20,
 		21, 22, 23
+};
+
+uint8_t point_display_map[8][3] = {
+		{0, 1, 2},
+		{7, 8, 9},
+		{14, 15, 16},
+		{21, 22, 23},
+		{3, 10, 17},
+		{4, 11, 18},
+		{5, 12, 19},
+		{6, 13, 20}
 };
 
 uint8_t node_relation[NUM_BASE_NODES][4] = {
@@ -86,6 +97,10 @@ uint8_t trailing_zeros(uint32_t n) {
 		n >>= 1;
 	}
 	return zeros;
+}
+
+mesh_point_t *mesh_get_point_display_mapped(mesh_t *system, uint8_t row, uint8_t col) {
+	return &system->points[point_display_map[row][col]];
 }
 
 mesh_point_t *mesh_get_point(mesh_t *system, uint8_t row, uint8_t col) {
@@ -140,6 +155,11 @@ bool mesh_reset_buffers(mesh_t *system) {
 		system->nodes[node_idx].point_mask = 0;
 		system->nodes[node_idx].cons.length = 0;
 		system->nodes[node_idx].voltage = 0;
+	}
+
+	for (int i = 0; i < 24; i++) {
+		system->points[i].voltage = 0;
+		system->points[i].nodes.length = 0;
 	}
 
 	for (int super_node_idx = 0; super_node_idx < MESH_SUPER_NODE_BUFFER_SIZE; super_node_idx++) {
@@ -209,132 +229,135 @@ The simplified graph will merge nodes which are connected by loads.
 	return true;
 }
 
-bool mesh_solve(mesh_t *system) {
-/*
- 	We are trying to solve x = A^-1 * Z
+bool mesh_resolve(mesh_t* system) {
+		mesh_reset_buffers(system);
 
- 	N = number of circuit nodes
-	M = number of circuit sources
+		// Generate a simplified network by considering loads
+		mesh_point_t *point;
 
-	A =  G B
-		 C D
-
-	A is a (M + N) * (M + N) matrix.
-
-	G is a N * N matrix. Diagonals are the components
-	connected to each node i,j. The off-diagonals is the
-	negative sum of the impedances connected from node i to j.
-
-	B is an N * M matrix. It contains entries that define where
-	a voltage source is connected. Only -1, 1 and 0 entries are
-	allowed. B[j][k] decides if voltage source k is connected to node j
-
-	C is the transpose of B if no dependent sources are present.
-
-	D is an M * M matrix. This is always zero is there are
-	no dependent sources.
-
-	Z is an (M + N) * 1 matrix.
-
-	Z = i
-		e
-
-	i in this case is a zero matrix is no current sources
-	are present. The entry e is an M * 1 matrix that encodes
-	voltage source values.
-
-	When A is found, take the inverse and solve for x.
-
-	x is an (M + N) * 1 matrix. Top N elements are the node voltages.
-	Bottom M elements are the currents through the M independent sources.
-*/
-	mesh_reset_buffers(system);
-
-	// Generate a simplified network by considering loads
-	mesh_point_t *point;
-
-	for (int node_idx = 0; node_idx < NUM_BASE_NODES; node_idx++) {
-		// Each node has 4 points
-		bool load = false;
-		// A node which has no outgoing connections (all points are closed) is not a valid node
-		// Since its unreachable. Will cause the solver to fail.
-		bool valid_node = false;
-		for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
-			point = &system->points[node_relation[node_idx][point_idx]];
-			if (point->is_closed) {
-				valid_node = true;
-				if (point->what == mesh_point_type_load) {
-					load = true;
-					break;
-				}
-			}
-		}
-
-		if (!valid_node)
-			continue;
-
-		if (load) {
-			// If there is a load at this node, check if any of its load points
-			// intersect with any existing supernodes. If it does, then we merge
-			// This node with the intersecting supernode.
-			mesh_node_buffer_t *super;
-			// Each node can only intersect with another node by a single point
-			// Because of the grid layout
-			uint32_t intersection = 0;
-			bool merge = false;
-			for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
-				super = &system->super_nodes[super_node_idx];
-
-				for (int merger_index = 0; merger_index < super->length; merger_index++) {
-					uint8_t node = super->indices[merger_index];
-					intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[node];
-					// Make sure intersection does not equal 0
-					if (intersection) {
-						if (system->points[trailing_zeros(intersection)].what == mesh_point_type_load) {
-							mesh_node_buffer_insert(super, node_idx);
-							merge = true;
-							break;
-						}
+		for (int node_idx = 0; node_idx < NUM_BASE_NODES; node_idx++) {
+			// Each node has 4 points
+			bool load = false;
+			// A node which has no outgoing connections (all points are closed) is not a valid node
+			// Since its unreachable. Will cause the solver to fail.
+			bool valid_node = false;
+			for (int point_idx = 0; point_idx < MESH_NODE_CONNECTED_POINTS; point_idx++) {
+				point = &system->points[node_relation[node_idx][point_idx]];
+				if (point->is_closed) {
+					valid_node = true;
+					if (point->what == mesh_point_type_load) {
+						load = true;
+						break;
 					}
 				}
-
-				if (merge)
-					break;
 			}
-			if (!merge)
-				// If no merge happened, create a new supernode
-				mesh_node_buffer_insert(&system->super_nodes[system->num_super_nodes++], node_idx);
-		} else {
-			// If there are no loads, simply add the node to the list with all its points
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][0]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][1]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][2]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes++], node_relation[node_idx][3]);
+
+			if (!valid_node)
+				continue;
+
+			if (load) {
+				// If there is a load at this node, check if any of its load points
+				// intersect with any existing supernodes. If it does, then we merge
+				// This node with the intersecting supernode.
+				mesh_node_buffer_t *super;
+				// Each node can only intersect with another node by a single point
+				// Because of the grid layout
+				uint32_t intersection = 0;
+				bool merge = false;
+				for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
+					super = &system->super_nodes[super_node_idx];
+
+					for (int merger_index = 0; merger_index < super->length; merger_index++) {
+						uint8_t node = super->indices[merger_index];
+						intersection = node_relation_bitwise[node_idx] & node_relation_bitwise[node];
+						// Make sure intersection does not equal 0
+						if (intersection) {
+							if (system->points[trailing_zeros(intersection)].what == mesh_point_type_load) {
+								mesh_node_buffer_insert(super, node_idx);
+								merge = true;
+								break;
+							}
+						}
+					}
+
+					if (merge)
+						break;
+				}
+				if (!merge)
+					// If no merge happened, create a new supernode
+					mesh_node_buffer_insert(&system->super_nodes[system->num_super_nodes++], node_idx);
+			} else {
+				// If there are no loads, simply add the node to the list with all its points
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][0]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][1]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node_idx][2]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes++], node_relation[node_idx][3]);
+			}
 		}
-	}
 
-	// Convert supernodes into nodes
-	mesh_node_buffer_t *super;
+		// Convert supernodes into nodes
+		mesh_node_buffer_t *super;
 
-	for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
-		super = &system->super_nodes[super_node_idx];
+		for (int super_node_idx = 0; super_node_idx < system->num_super_nodes; super_node_idx++) {
+			super = &system->super_nodes[super_node_idx];
 
-		for (int merger_index = 0; merger_index < super->length; merger_index++) {
-			uint8_t node = super->indices[merger_index];
+			for (int merger_index = 0; merger_index < super->length; merger_index++) {
+				uint8_t node = super->indices[merger_index];
 
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][0]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][1]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][2]);
-			mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][3]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][0]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][1]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][2]);
+				mesh_node_point_insert(&system->nodes[system->num_nodes], node_relation[node][3]);
+			}
+
+			system->num_nodes++;
 		}
 
-		system->num_nodes++;
-	}
+		mesh_build_node_graph(system);
 
-	mesh_build_node_graph(system);
-	// Everything above can be precomputed
-	// Now solve the system
+		return true;
+}
 
+bool mesh_solve(mesh_t *system) {
+	/*
+	 	We are trying to solve x = A^-1 * Z
+
+	 	N = number of circuit nodes
+		M = number of circuit sources
+
+		A =  G B
+			 C D
+
+		A is a (M + N) * (M + N) matrix.
+
+		G is a N * N matrix. Diagonals are the components
+		connected to each node i,j. The off-diagonals is the
+		negative sum of the impedances connected from node i to j.
+
+		B is an N * M matrix. It contains entries that define where
+		a voltage source is connected. Only -1, 1 and 0 entries are
+		allowed. B[j][k] decides if voltage source k is connected to node j
+
+		C is the transpose of B if no dependent sources are present.
+
+		D is an M * M matrix. This is always zero is there are
+		no dependent sources.
+
+		Z is an (M + N) * 1 matrix.
+
+		Z = i
+			e
+
+		i in this case is a zero matrix is no current sources
+		are present. The entry e is an M * 1 matrix that encodes
+		voltage source values.
+
+		When A is found, take the inverse and solve for x.
+
+		x is an (M + N) * 1 matrix. Top N elements are the node voltages.
+		Bottom M elements are the currents through the M independent sources.
+	*/
+	mesh_point_t *point;
 	//uint32_t g_size = system->num_nodes * system->num_nodes;
 	uint16_t a_size = (system->num_nodes + system->source_nodes.length);
 

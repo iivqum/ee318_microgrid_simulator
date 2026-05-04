@@ -38,7 +38,7 @@
 
 void match(uint32_t flags) {
 	// Main display refresh
-	//display_callback(flags);
+	display_callback(flags);
 	CTIMER_ClearStatusFlags(CTIMER0, kCTIMER_Match0Flag);
 }
 
@@ -65,8 +65,15 @@ int main(void) {
     system.points[0].what = mesh_point_type_generator;
     system.points[0].is_closed = true;
 
-    system.points[3].is_closed = true;
-    system.points[3].what = mesh_point_type_load;
+    system.points[7].is_closed = true;
+
+    system.points[14].is_closed = true;
+
+    system.points[21].what = mesh_point_type_load;
+    system.points[21].is_closed = true;
+
+	mesh_resolve(&system);
+	mesh_solve(&system);
 
     /*
     The game will start when the user flips one of the switches marked with
@@ -89,46 +96,49 @@ int main(void) {
 
 	The user can start a new round by flipping any of the switches.
     */
-
-    bool success = mesh_solve(&system);
-
-    while (1) {
-
-    }
-
-    /*
+    switch_reset_fake_states();
     switch_fetch_states();
 
     bool has_switch_changed;
     rgb_led led = {0, 0, 0};
-
     mesh_point_t *point;
 
     while (1) {
     	has_switch_changed = switch_fetch_states();
 
     	if (has_switch_changed) {
-        	for (int i = 0; i < 8; i++) {
-        		for (int j = 0; j < 3; j++) {
-        			led.r = 0;
-        			led.g = 0;
-        			led.b = 0;
+    		for (int i = 0; i < 8; i++) {
+    			for (int j = 0; j < 3; j++) {
+    				bool state = switch_get_state(i, 2 - j, false);
+    				// If it changed
+    				if (state) {
+						point = mesh_get_point_display_mapped(&system, i, j);
+						point->is_closed = !point->is_closed;
+    				}
+    			}
+    		}
 
-        			point = mesh_get_point(&system, i, 2 - j);
+    		mesh_resolve(&system);
+    		mesh_solve(&system);
 
-					if (point->what == mesh_point_type_generator) {
-						led.g = 16;
-					} else if (point->what == mesh_point_type_load) {
-						led.b = 16;
-					} else if (switch_get_state(i, j)) {
-        				led.r = 31;
-        			}
+    		for (int i = 0; i < 8; i++) {
+    			for (int j = 0; j < 3; j++) {
+    				led.r = 0;
+    				led.g = 0;
+    				led.b = 0;
 
-        			display_set_led(i, 2 - j, &led);
-        		}
-        	}
+    				point = mesh_get_point_display_mapped(&system, i, j);
+
+    				if (point->what == mesh_point_type_generator) {
+    					led.g = 31;
+    				} else {
+    					led.r = (float)31 * (float)fabs(point->voltage);
+    				}
+
+    				display_set_led(i, j, &led);
+    			}
+    		}
     	}
     }
-	*/
     return 0;
 }

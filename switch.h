@@ -60,7 +60,8 @@ void switch_write_bytes(uint8_t *data, uint16_t length);
 void switch_clock_store();
 void switch_clock_output();
 void switch_write_16(uint16_t data);
-bool switch_get_state(uint8_t row, uint8_t col);
+bool switch_get_state(uint8_t row, uint8_t col, bool raw);
+void switch_reset_fake_states();
 // Returns true if any of the switch states changed
 bool switch_fetch_states();
 

@@ -14,9 +14,10 @@ uint32_t row_lookup[8] = {SWITCH_R1, SWITCH_R2, SWITCH_R3,
 		SWITCH_R4, SWITCH_R5, SWITCH_R6, SWITCH_R7, SWITCH_R8};
 
 bool switch_states[SWITCH_NUM_ROWS][SWITCH_NUM_COLS] = {false};
+bool switch_states_raw[SWITCH_NUM_ROWS][SWITCH_NUM_COLS] = {false};
 
-bool switch_get_state(uint8_t row, uint8_t col) {
-	return switch_states[row][col];
+bool switch_get_state(uint8_t row, uint8_t col, bool raw) {
+	return raw ? switch_states_raw[row][col] : switch_states[row][col];
 }
 
 bool switch_fetch_states() {
@@ -34,15 +35,23 @@ bool switch_fetch_states() {
     		// Wait for switches to settle
     		SDK_DelayAtLeastUs(100, 150e6);
 
-    		bool old_state = switch_states[row][col];
-    		switch_states[row][col] = !GPIO_PinRead(SWITCH_GPIO_PORT, SWITCH_SENSE);
+    		bool old_state = switch_states_raw[row][col];
+    		switch_states_raw[row][col] = !GPIO_PinRead(SWITCH_GPIO_PORT, SWITCH_SENSE);
 
-    		if (switch_states[row][col] != old_state)
+    		if (switch_states_raw[row][col] != old_state) {
     			change = true;
+    			switch_states[row][col] = true;
+    		} else {
+    			switch_states[row][col] = false;
+    		}
     	}
     }
 
     return change;
+}
+
+void switch_reset_fake_states() {
+	memset(switch_states, false, sizeof(switch_states));
 }
 
 void switch_clock_store() {
