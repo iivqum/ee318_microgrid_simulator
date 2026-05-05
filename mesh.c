@@ -107,6 +107,14 @@ mesh_point_t *mesh_get_point(mesh_t *system, uint8_t row, uint8_t col) {
 	return &system->points[row * 3 + col];
 }
 
+void mesh_reset_connections(mesh_t *system) {
+	for (int i = 0; i < 24; i++) {
+		if (system->points[i].what == mesh_point_type_connection) {
+			system->points[i].is_closed = false;
+		}
+	}
+}
+
 bool mesh_point_init(mesh_point_t *point) {
 	point->what = mesh_point_type_connection;
 	point->is_closed = false;
@@ -149,6 +157,7 @@ bool mesh_reset_buffers(mesh_t *system) {
 	system->num_super_nodes = 0;
 	system->num_nodes = 0;
 	system->source_nodes.length = 0;
+	system->solution_valid = false;
 
 	for (int node_idx = 0; node_idx < MESH_NODE_BUFFER_SIZE; node_idx++) {
 		system->nodes[node_idx].length = 0;
@@ -458,6 +467,8 @@ bool mesh_solve(mesh_t *system) {
 		point->voltage = system->nodes[point->nodes.indices[0]].voltage
 				- system->nodes[point->nodes.indices[1]].voltage;
 	}
+
+	system->solution_valid = true;
 
 	return true;
 }

@@ -82,9 +82,12 @@ typedef struct mesh {
 	mesh_node_buffer_t super_nodes[MESH_SUPER_NODE_BUFFER_SIZE];
 	mesh_node_buffer_t source_nodes;
 	uint8_t num_super_nodes, num_nodes;
+	bool solution_valid;
 } mesh_t;
 
 bool mesh_solve(mesh_t *system);
+// Open every connection that isn't a load or generator
+void mesh_reset_connections(mesh_t *system);
 bool mesh_resolve(mesh_t *system);
 bool mesh_init(mesh_t *system);
 bool mesh_reset_buffers(mesh_t *system);
