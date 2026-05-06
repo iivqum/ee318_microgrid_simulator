@@ -99,6 +99,10 @@ uint8_t trailing_zeros(uint32_t n) {
 	return zeros;
 }
 
+static float maxf(float a, float b) {
+	return (a > b) ? a : b;
+}
+
 mesh_point_t *mesh_get_point_display_mapped(mesh_t *system, uint8_t row, uint8_t col) {
 	return &system->points[point_display_map[row][col]];
 }
@@ -118,7 +122,7 @@ void mesh_reset_connections(mesh_t *system) {
 bool mesh_point_init(mesh_point_t *point) {
 	point->what = mesh_point_type_connection;
 	point->is_closed = false;
-	point->generation_level = 0;
+	point->generation_level = 1;
 	point->impedance = 1;
 	point->voltage = 0;
 	point->nodes.length = 0;
@@ -153,8 +157,42 @@ bool mesh_node_point_insert(mesh_node_t *node, uint8_t point_idx) {
 	return false;
 }
 
+void mesh_reset_grid_points(mesh_t *system) {
+	mesh_point_t *point;
+
+	for (int point_idx = 0; point_idx < MESH_POINT_BUFFER_SIZE; point_idx++) {
+		point = &system->points[point_idx];
+		point->what = mesh_point_type_connection;
+	}
+}
+
+float mesh_get_load_balance(mesh_t *system) {
+	// Finally calculate voltage across the components
+	float max_load_voltage = 0;
+	float sum_voltage = 0;
+	float num_loads = 0;
+	mesh_point_t *point;
+
+	for (int point_idx = 0; point_idx < MESH_POINT_BUFFER_SIZE; point_idx++) {
+		point = &system->points[point_idx];
+
+		if (point->what != mesh_point_type_load)
+			continue;
+
+		num_loads++;
+		sum_voltage += fabsf(point->voltage);
+		max_load_voltage = maxf(fabsf(max_load_voltage), point->voltage);
+	}
+	// Average load voltage
+	sum_voltage /= num_loads;
+	float balance = sum_voltage / max_load_voltage;
+
+	return balance;
+}
+
 bool mesh_reset_buffers(mesh_t *system) {
 	system->num_super_nodes = 0;
+	system->load_balance = 0;
 	system->num_nodes = 0;
 	system->source_nodes.length = 0;
 	system->solution_valid = false;
@@ -469,6 +507,7 @@ bool mesh_solve(mesh_t *system) {
 	}
 
 	system->solution_valid = true;
+	system->load_balance = mesh_get_load_balance(system);
 
 	return true;
 }

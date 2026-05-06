@@ -82,6 +82,7 @@ typedef struct mesh {
 	mesh_node_buffer_t super_nodes[MESH_SUPER_NODE_BUFFER_SIZE];
 	mesh_node_buffer_t source_nodes;
 	uint8_t num_super_nodes, num_nodes;
+	float load_balance;
 	bool solution_valid;
 } mesh_t;
 
@@ -90,7 +91,10 @@ bool mesh_solve(mesh_t *system);
 void mesh_reset_connections(mesh_t *system);
 bool mesh_resolve(mesh_t *system);
 bool mesh_init(mesh_t *system);
+// Make every grid point a connection
+void mesh_reset_grid_points(mesh_t *system);
 bool mesh_reset_buffers(mesh_t *system);
+float mesh_get_load_balance(mesh_t *system);
 bool mesh_build_node_graph(mesh_t *system);
 mesh_point_t *mesh_get_point(mesh_t *system, uint8_t row, uint8_t col);
 mesh_point_t *mesh_get_point_display_mapped(mesh_t *system, uint8_t row, uint8_t col);
